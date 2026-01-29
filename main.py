@@ -470,7 +470,7 @@ async def handle_main_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 f"📞 **Contact Local Manager**\n\n"
                 f"📍 Region: {country_name}\n\n"
                 f"Please contact our local manager for personalized support:\n"
-                f"👉 @SupportManager_{country}\n\n"
+                f"👉 @Contact_7starswinpartners_{country}\n\n"
                 f"*Note: Contact your manager directly on Telegram*"
             )
         else:
