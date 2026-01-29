@@ -213,15 +213,31 @@ def get_phone_keyboard():
     )
 
 def get_language_keyboard():
+    """Create language keyboard with 3 buttons per row (4 rows total)"""
     buttons = []
-    for lang_code, lang_name in LANGUAGES.items():
-        buttons.append([InlineKeyboardButton(lang_name, callback_data=f"lang_{lang_code}")])
+    lang_items = list(LANGUAGES.items())
+    
+    # Split into chunks of 3 for 4 rows (12 items total)
+    for i in range(0, len(lang_items), 3):
+        row = []
+        for lang_code, lang_name in lang_items[i:i+3]:
+            row.append(InlineKeyboardButton(lang_name, callback_data=f"lang_{lang_code}"))
+        buttons.append(row)
+    
     return InlineKeyboardMarkup(buttons)
 
 def get_country_keyboard():
+    """Create country keyboard with 3 buttons per row (4 rows total)"""
     buttons = []
-    for country_code, country_name in COUNTRIES.items():
-        buttons.append([InlineKeyboardButton(country_name, callback_data=f"country_{country_code}")])
+    country_items = list(COUNTRIES.items())
+    
+    # Split into chunks of 3 for 4 rows (12 items total)
+    for i in range(0, len(country_items), 3):
+        row = []
+        for country_code, country_name in country_items[i:i+3]:
+            row.append(InlineKeyboardButton(country_name, callback_data=f"country_{country_code}"))
+        buttons.append(row)
+    
     return InlineKeyboardMarkup(buttons)
 
 def get_main_menu_keyboard():
@@ -647,10 +663,10 @@ async def handle_admin_message(update: Update, context: ContextTypes.DEFAULT_TYP
     if user_id not in ADMIN_IDS:
         return
     
-    # Handle user ID input for specific user
+    # Handle user ID input for specific user - FIXED
     if context.user_data.get('awaiting_user_id'):
         try:
-            target_user_id = int(update.message.text)
+            target_user_id = int(update.message.text.strip())
             
             # Check if user exists
             user = get_user(target_user_id)
@@ -676,7 +692,7 @@ async def handle_admin_message(update: Update, context: ContextTypes.DEFAULT_TYP
             await update.message.reply_text("❌ Invalid User ID. Please send a numeric ID or /cancel")
             return
     
-    # Handle message input for broadcast
+    # Handle message input for broadcast - FIXED: Check if we're in broadcast mode
     if context.user_data.get('awaiting_message'):
         broadcast_type = context.user_data.get('broadcast_type')
         
@@ -694,11 +710,26 @@ async def handle_admin_message(update: Update, context: ContextTypes.DEFAULT_TYP
             context.user_data['broadcast_message'] = update.message
             context.user_data['total_users'] = total_users
             
+            # Extract message text for preview
+            message_text = ""
+            if update.message.text:
+                message_text = update.message.text[:200]
+            elif update.message.caption:
+                message_text = update.message.caption[:200]
+            elif update.message.photo:
+                message_text = "📷 Photo message"
+            elif update.message.video:
+                message_text = "🎥 Video message"
+            elif update.message.document:
+                message_text = "📄 Document"
+            else:
+                message_text = "Media message"
+            
             await update.message.reply_text(
                 f"⚠️ **CONFIRM BROADCAST**\n\n"
                 f"Send this message to ALL {total_users} users?\n\n"
                 f"**Message Preview:**\n"
-                f"{update.message.text[:200] if update.message.text else '📎 Media message'}...\n\n"
+                f"{message_text}...\n\n"
                 f"This action cannot be undone!",
                 reply_markup=get_broadcast_confirm_keyboard()
             )
@@ -708,14 +739,34 @@ async def handle_admin_message(update: Update, context: ContextTypes.DEFAULT_TYP
             target_user_id = context.user_data.get('target_user_id')
             target_user_name = context.user_data.get('target_user_name', 'User')
             
+            if not target_user_id:
+                await update.message.reply_text("❌ User ID not found. Please start over.")
+                context.user_data.clear()
+                return
+            
             # Store message for confirmation
             context.user_data['broadcast_message'] = update.message
+            
+            # Extract message text for preview
+            message_text = ""
+            if update.message.text:
+                message_text = update.message.text[:200]
+            elif update.message.caption:
+                message_text = update.message.caption[:200]
+            elif update.message.photo:
+                message_text = "📷 Photo message"
+            elif update.message.video:
+                message_text = "🎥 Video message"
+            elif update.message.document:
+                message_text = "📄 Document"
+            else:
+                message_text = "Media message"
             
             await update.message.reply_text(
                 f"⚠️ **CONFIRM SEND**\n\n"
                 f"Send this message to {target_user_name} (ID: {target_user_id})?\n\n"
                 f"**Message Preview:**\n"
-                f"{update.message.text[:200] if update.message.text else '📎 Media message'}...",
+                f"{message_text}...",
                 reply_markup=get_specific_user_confirm_keyboard()
             )
         
@@ -772,7 +823,14 @@ async def handle_broadcast_confirmation(update: Update, context: ContextTypes.DE
                 logger.error(f"Failed to send to user {user['user_id']}: {e}")
         
         # Save broadcast record
-        content_preview = broadcast_message.text[:100] if broadcast_message.text else "Media message"
+        content_preview = ""
+        if broadcast_message.text:
+            content_preview = broadcast_message.text[:100]
+        elif broadcast_message.caption:
+            content_preview = broadcast_message.caption[:100]
+        else:
+            content_preview = "Media message"
+            
         save_broadcast(
             admin_id=user_id,
             target_type='all',
@@ -824,7 +882,14 @@ async def handle_broadcast_confirmation(update: Update, context: ContextTypes.DE
             )
             
             # Save record
-            content_preview = broadcast_message.text[:100] if broadcast_message.text else "Media message"
+            content_preview = ""
+            if broadcast_message.text:
+                content_preview = broadcast_message.text[:100]
+            elif broadcast_message.caption:
+                content_preview = broadcast_message.caption[:100]
+            else:
+                content_preview = "Media message"
+                
             save_broadcast(
                 admin_id=user_id,
                 target_type='specific',
@@ -851,13 +916,8 @@ async def handle_broadcast_confirmation(update: Update, context: ContextTypes.DE
         # Clear data
         context.user_data.clear()
     
-    elif query.data == "cancel_send":
-        await query.edit_message_text("❌ Broadcast cancelled.")
-        context.user_data.clear()
-        await admin_panel(update, context)
-    
-    elif query.data == "cancel_specific":
-        await query.edit_message_text("❌ Send to user cancelled.")
+    elif query.data == "cancel_send" or query.data == "cancel_specific":
+        await query.edit_message_text("❌ Operation cancelled.")
         context.user_data.clear()
         await admin_panel(update, context)
 
@@ -913,8 +973,9 @@ def main():
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_main_menu))
     
     # Special handler for admin messages (for broadcast input)
+    # FIXED: Changed to handle all admin messages including text
     application.add_handler(MessageHandler(
-        filters.ALL & filters.User(ADMIN_IDS) & ~filters.COMMAND, 
+        filters.ALL & filters.User(ADMIN_IDS), 
         handle_admin_message
     ))
     
