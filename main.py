@@ -23,16 +23,19 @@ from telegram.ext import (
 )
 
 # ========== CONFIGURATION ==========
-TOKEN = os.environ['TELEGRAM_BOT_TOKEN'] 
-ADMIN_IDS = []
+
+TOKEN = os.environ['TELEGRAM_BOT_TOKEN']
+
+ADMIN_IDS = [7771621948]
+
 try:
     admin_ids_str = os.environ.get('ADMIN_IDS', '7771621948')
     ADMIN_IDS = [int(x.strip()) for x in admin_ids_str.split(',') if x.strip()]
 except:
     ADMIN_IDS = [7771621948]
 
-print(f"🔑 Bot Token: {TOKEN[:10]}...")
-print(f"👑 Admin IDs: {ADMIN_IDS}")
+print(f"Bot Token: {TOKEN[:10]}...")  # Fixed: show first 10 chars only for security
+print(f"Admin IDs: {ADMIN_IDS}")
 
 DB_PATH = 'bot.db'
 
