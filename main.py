@@ -23,7 +23,7 @@ from telegram.ext import (
 )
 
 # ========== CONFIGURATION ==========
-TOKEN = os.environ.get('TELEGRAM_BOT_TOKEN', '236723437:AAHSEizuNxuhmPUcflV_4nt7HVDxg2MHhPs')
+TOKEN = os.environ['TELEGRAM_BOT_TOKEN'] 
 ADMIN_IDS = []
 try:
     admin_ids_str = os.environ.get('ADMIN_IDS', '7771621948')
