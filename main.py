@@ -25,7 +25,7 @@ from telegram.ext import (
 
 # ========== CONFIGURATION ==========
 TOKEN = os.environ.get('TELEGRAM_BOT_TOKEN', '7858094896:AAHabzaULaYJvh5tlsdgFAiVLmmSy15X7jg')
-ADMIN_IDS = [7771621948]  # Your admin ID
+ADMIN_IDS = [8477793739]  # Your admin ID
 DB_PATH = 'bot.db'
 
 # Enable logging
