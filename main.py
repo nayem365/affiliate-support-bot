@@ -226,7 +226,6 @@ def get_language_keyboard():
     buttons = []
     lang_items = list(LANGUAGES.items())
     
-    # Split into chunks of 3 for 4 rows (12 items total)
     for i in range(0, len(lang_items), 3):
         row = []
         for lang_code, lang_name in lang_items[i:i+3]:
@@ -240,7 +239,6 @@ def get_country_keyboard():
     buttons = []
     country_items = list(COUNTRIES.items())
     
-    # Split into chunks of 3 for 4 rows (12 items total)
     for i in range(0, len(country_items), 3):
         row = []
         for country_code, country_name in country_items[i:i+3]:
@@ -275,14 +273,12 @@ def get_country_selection_keyboard():
     buttons = []
     country_items = list(COUNTRIES.items())
     
-    # Split into chunks of 3 for 4 rows (12 items total)
     for i in range(0, len(country_items), 3):
         row = []
         for country_code, country_name in country_items[i:i+3]:
             row.append(InlineKeyboardButton(country_name, callback_data=f"bcast_country_{country_code}"))
         buttons.append(row)
     
-    # Add back button
     buttons.append([InlineKeyboardButton("🔙 Back to Admin Panel", callback_data="back_to_admin")])
     
     return InlineKeyboardMarkup(buttons)
@@ -321,29 +317,23 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     print(f"🚀 /start from {user_id} ({user_name})")
     
-    # Check if admin
     if user_id in ADMIN_IDS:
         await update.message.reply_text(
-            f"👑 Welcome Admin {user_name}!\n"
-            f"Use /admin to access admin panel.",
+            f"👑 Welcome Admin {user_name}!\nUse /admin to access admin panel.",
             reply_markup=get_main_menu_keyboard()
         )
         return ConversationHandler.END
     
     existing_user = get_user(user_id)
     if existing_user:
-        # Show menu immediately for existing users
         await update.message.reply_text(
-            f"👋 Welcome back {user_name}!\n"
-            "Use the menu below:",
+            f"👋 Welcome back {user_name}!\nUse the menu below:",
             reply_markup=get_main_menu_keyboard()
         )
         return ConversationHandler.END
     
-    # New user flow
     await update.message.reply_text(
-        f"👋 Hello {user_name}!\n\n"
-        "Welcome to **Affiliate Support Bot**!\n\n"
+        f"👋 Hello {user_name}!\n\nWelcome to **Affiliate Support Bot**!\n\n"
         "To access our affiliate program, please share your phone number:",
         reply_markup=get_phone_keyboard()
     )
@@ -363,8 +353,7 @@ async def handle_contact(update: Update, context: ContextTypes.DEFAULT_TYPE):
         save_user_state(user_id, 'language', f"{name}|{phone}")
         
         await update.message.reply_text(
-            "✅ Phone number verified!\n\n"
-            "Please select your preferred language:",
+            "✅ Phone number verified!\n\nPlease select your preferred language:",
             reply_markup=get_language_keyboard()
         )
         return LANGUAGE
@@ -391,8 +380,7 @@ async def handle_language_selection(update: Update, context: ContextTypes.DEFAUL
     save_user_state(user_id, 'country', f"{name}|{phone}|{language_code}")
     
     await query.edit_message_text(
-        f"✅ Language selected: {LANGUAGES[language_code]}\n\n"
-        "Now select your country:",
+        f"✅ Language selected: {LANGUAGES[language_code]}\n\nNow select your country:",
         reply_markup=get_country_keyboard()
     )
     return COUNTRY
@@ -411,34 +399,26 @@ async def handle_country_selection(update: Update, context: ContextTypes.DEFAULT
     
     name, phone, language_code = state['data'].split('|')
     
-    # Save user to database
     save_user(user_id, name, phone, language_code, country_code)
     clear_user_state(user_id)
     
-    # Get country-specific offer
     offer = COUNTRY_OFFERS.get(country_code, "Welcome to our affiliate program!")
     
-    # Send registration success message
     await query.edit_message_text(
         f"🎉 **REGISTRATION SUCCESSFUL!**\n\n"
         f"✅ Account Created\n"
         f"👤 Name: {name}\n"
         f"🌍 Country: {COUNTRIES[country_code]}\n"
         f"🗣️ Language: {LANGUAGES[language_code]}\n\n"
-        f"{offer}\n\n"
-        f"👇 Use the menu below to get started:"
+        f"{offer}\n\n👇 Use the menu below to get started:"
     )
     
-    # NOTIFY ADMINS ABOUT NEW USER
     await notify_admins(context.application, user_id, name, phone, language_code, country_code)
-    
-    # Show main menu
     await show_main_menu(update, context)
     
     return ConversationHandler.END
 
 async def notify_admins(application, user_id: int, name: str, phone: str, language: str, country: str):
-    """Send notification to all admins about new user"""
     message = (
         "🆕 **NEW USER REGISTERED**\n\n"
         f"👤 Name: {name}\n"
@@ -461,7 +441,6 @@ async def notify_admins(application, user_id: int, name: str, phone: str, langua
             print(f"❌ Failed to notify admin {admin_id}: {e}")
 
 async def show_main_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Show main menu"""
     keyboard = get_main_menu_keyboard()
     
     if update.callback_query:
@@ -476,11 +455,9 @@ async def show_main_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
 
 async def handle_main_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle main menu selections"""
     text = update.message.text
     user_id = update.effective_user.id
     
-    # Update user activity
     update_user_activity(user_id)
     
     if text == "📞 Contact Local Manager":
@@ -500,14 +477,12 @@ async def handle_main_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text("Please register first with /start")
     
     elif text == "ℹ️ About Program":
-        # Show program details automatically
         await show_program_details(update, context)
     
     elif text == "🔄 Restart":
         await start(update, context)
 
 async def show_program_details(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Show affiliate program details"""
     user_id = update.effective_user.id
     user = get_user(user_id)
     
@@ -538,11 +513,9 @@ async def show_program_details(update: Update, context: ContextTypes.DEFAULT_TYP
         )
 
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Cancel conversation"""
     user_id = update.effective_user.id
     clear_user_state(user_id)
     
-    # Clear any admin states
     if context.user_data.get('admin_mode'):
         context.user_data.clear()
     
@@ -557,7 +530,6 @@ async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("❌ Access denied. You are not an admin.")
         return
     
-    # Clear any previous states
     context.user_data.clear()
     context.user_data['admin_mode'] = True
     
@@ -573,7 +545,6 @@ async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return ConversationHandler.END
 
 async def admin_callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle admin callback queries"""
     query = update.callback_query
     await query.answer()
     
@@ -583,7 +554,6 @@ async def admin_callback_handler(update: Update, context: ContextTypes.DEFAULT_T
         return
     
     if query.data == "broadcast_all":
-        # Set state for broadcast to all users
         context.user_data['awaiting_message'] = True
         context.user_data['broadcast_type'] = 'all'
         
@@ -599,7 +569,6 @@ async def admin_callback_handler(update: Update, context: ContextTypes.DEFAULT_T
         )
     
     elif query.data == "send_specific":
-        # Set state for specific user
         context.user_data['awaiting_user_id'] = True
         context.user_data['broadcast_type'] = 'specific'
         
@@ -611,7 +580,6 @@ async def admin_callback_handler(update: Update, context: ContextTypes.DEFAULT_T
         )
     
     elif query.data == "broadcast_country":
-        # Set state for country selection
         context.user_data['awaiting_country'] = True
         context.user_data['broadcast_type'] = 'country'
         
@@ -622,7 +590,6 @@ async def admin_callback_handler(update: Update, context: ContextTypes.DEFAULT_T
         )
     
     elif query.data.startswith("bcast_country_"):
-        # Country selected for broadcast
         country_code = query.data.replace('bcast_country_', '')
         country_name = COUNTRIES.get(country_code, country_code)
         
@@ -631,7 +598,6 @@ async def admin_callback_handler(update: Update, context: ContextTypes.DEFAULT_T
         context.user_data['awaiting_country'] = False
         context.user_data['awaiting_message'] = True
         
-        # Get number of users in this country
         users_in_country = get_users_by_country(country_code)
         user_count = len(users_in_country)
         
@@ -651,26 +617,15 @@ async def admin_callback_handler(update: Update, context: ContextTypes.DEFAULT_T
         total = get_total_users()
         users = get_all_users()
         
-        # Count by country
         country_stats = {}
         for user in users:
             country = user.get('country', 'Unknown')
             country_stats[country] = country_stats.get(country, 0) + 1
         
-        # Calculate active users (last 24 hours)
-        active_users = 0
-        day_ago = datetime.now() - timedelta(hours=24)
-        
         stats_text = "📊 **USER STATISTICS**\n\n"
         stats_text += f"👥 Total Users: {total}\n"
         
         if total > 0:
-            # Count users by registration date (last 7 days)
-            week_ago = datetime.now() - timedelta(days=7)
-            new_users = 0
-            
-            stats_text += f"📈 Active (last 24h): {active_users}\n"
-            stats_text += f"🆕 New (last 7 days): {new_users}\n\n"
             stats_text += "🌍 **Users by Country:**\n"
             for country, count in sorted(country_stats.items(), key=lambda x: x[1], reverse=True):
                 country_name = COUNTRIES.get(country, country)
@@ -679,7 +634,6 @@ async def admin_callback_handler(update: Update, context: ContextTypes.DEFAULT_T
         else:
             stats_text += "\nNo users registered yet."
         
-        # Add back button
         keyboard = InlineKeyboardMarkup([
             [InlineKeyboardButton("🔙 Back to Admin Panel", callback_data="back_to_admin")]
         ])
@@ -692,7 +646,6 @@ async def admin_callback_handler(update: Update, context: ContextTypes.DEFAULT_T
             await query.edit_message_text("📋 No users registered yet.")
             return
         
-        # Show first 10 users
         message = "📋 **REGISTERED USERS**\n\n"
         for i, user in enumerate(users[:10], 1):
             country = COUNTRIES.get(user.get('country', 'Unknown'), user.get('country', 'Unknown'))
@@ -706,7 +659,6 @@ async def admin_callback_handler(update: Update, context: ContextTypes.DEFAULT_T
         if len(users) > 10:
             message += f"📄 ... and {len(users)-10} more users"
         
-        # Add back button
         keyboard = InlineKeyboardMarkup([
             [InlineKeyboardButton("🔙 Back to Admin Panel", callback_data="back_to_admin")]
         ])
@@ -730,23 +682,19 @@ async def admin_callback_handler(update: Update, context: ContextTypes.DEFAULT_T
         )
 
 async def handle_admin_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle admin messages for broadcast"""
+    """Handle ALL admin messages - FIXED VERSION"""
     user_id = update.effective_user.id
     
     if user_id not in ADMIN_IDS:
         return
     
-    # Skip if message is a command
-    if update.message.text and update.message.text.startswith('/'):
-        return
+    print(f"🔧 DEBUG: Admin message received. State: {context.user_data}")
     
-    # Handle user ID input for specific user - FIXED
+    # Handle user ID input for specific user
     if context.user_data.get('awaiting_user_id'):
+        print("🔧 DEBUG: Processing user ID input")
         try:
-            # Extract the first number from the message
             text = update.message.text.strip()
-            
-            # Try to find a number in the text
             numbers = re.findall(r'\d+', text)
             
             if not numbers:
@@ -759,7 +707,6 @@ async def handle_admin_message(update: Update, context: ContextTypes.DEFAULT_TYP
             
             target_user_id = int(numbers[0])
             
-            # Check if user exists
             user = get_user(target_user_id)
             if not user:
                 await update.message.reply_text(
@@ -787,12 +734,13 @@ async def handle_admin_message(update: Update, context: ContextTypes.DEFAULT_TYP
             )
             return
     
-    # Handle message input for broadcast
+    # Handle message input for broadcast - FIXED: Check ALL message types
     if context.user_data.get('awaiting_message'):
+        print(f"🔧 DEBUG: Processing broadcast message. Type: {context.user_data.get('broadcast_type')}")
+        
         broadcast_type = context.user_data.get('broadcast_type')
         
         if broadcast_type == 'all':
-            # Broadcast to all users
             users = get_all_users()
             total_users = len(users)
             
@@ -801,11 +749,9 @@ async def handle_admin_message(update: Update, context: ContextTypes.DEFAULT_TYP
                 context.user_data.clear()
                 return
             
-            # Store message for confirmation
             context.user_data['broadcast_message'] = update.message
             context.user_data['total_users'] = total_users
             
-            # Extract message text for preview
             message_text = ""
             if update.message.text:
                 message_text = update.message.text[:200]
@@ -819,6 +765,8 @@ async def handle_admin_message(update: Update, context: ContextTypes.DEFAULT_TYP
                 message_text = "📄 Document"
             else:
                 message_text = "Media message"
+            
+            print(f"🔧 DEBUG: Sending confirmation for all users broadcast")
             
             await update.message.reply_text(
                 f"⚠️ **CONFIRM BROADCAST**\n\n"
@@ -830,7 +778,6 @@ async def handle_admin_message(update: Update, context: ContextTypes.DEFAULT_TYP
             )
             
         elif broadcast_type == 'specific':
-            # Send to specific user
             target_user_id = context.user_data.get('target_user_id')
             target_user_name = context.user_data.get('target_user_name', 'User')
             
@@ -839,10 +786,8 @@ async def handle_admin_message(update: Update, context: ContextTypes.DEFAULT_TYP
                 context.user_data.clear()
                 return
             
-            # Store message for confirmation
             context.user_data['broadcast_message'] = update.message
             
-            # Extract message text for preview
             message_text = ""
             if update.message.text:
                 message_text = update.message.text[:200]
@@ -857,6 +802,8 @@ async def handle_admin_message(update: Update, context: ContextTypes.DEFAULT_TYP
             else:
                 message_text = "Media message"
             
+            print(f"🔧 DEBUG: Sending confirmation for specific user broadcast")
+            
             await update.message.reply_text(
                 f"⚠️ **CONFIRM SEND**\n\n"
                 f"Send this message to {target_user_name} (ID: {target_user_id})?\n\n"
@@ -866,7 +813,6 @@ async def handle_admin_message(update: Update, context: ContextTypes.DEFAULT_TYP
             )
         
         elif broadcast_type == 'country':
-            # Send to specific country
             country_code = context.user_data.get('selected_country')
             country_name = context.user_data.get('selected_country_name', 'Unknown')
             
@@ -875,7 +821,6 @@ async def handle_admin_message(update: Update, context: ContextTypes.DEFAULT_TYP
                 context.user_data.clear()
                 return
             
-            # Get users in this country
             users = get_users_by_country(country_code)
             total_users = len(users)
             
@@ -887,11 +832,9 @@ async def handle_admin_message(update: Update, context: ContextTypes.DEFAULT_TYP
                 context.user_data.clear()
                 return
             
-            # Store message for confirmation
             context.user_data['broadcast_message'] = update.message
             context.user_data['country_users_count'] = total_users
             
-            # Extract message text for preview
             message_text = ""
             if update.message.text:
                 message_text = update.message.text[:200]
@@ -905,6 +848,8 @@ async def handle_admin_message(update: Update, context: ContextTypes.DEFAULT_TYP
                 message_text = "📄 Document"
             else:
                 message_text = "Media message"
+            
+            print(f"🔧 DEBUG: Sending confirmation for country broadcast")
             
             await update.message.reply_text(
                 f"⚠️ **CONFIRM COUNTRY BROADCAST**\n\n"
@@ -917,11 +862,12 @@ async def handle_admin_message(update: Update, context: ContextTypes.DEFAULT_TYP
         
         return
     
-    # If not in any admin mode, show admin panel
+    # If no special state, check if it's a regular admin command reply
+    print(f"🔧 DEBUG: No special state detected, showing admin panel")
     await admin_panel(update, context)
 
 async def handle_broadcast_confirmation(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle broadcast confirmation"""
+    """Handle broadcast confirmation - FIXED VERSION"""
     query = update.callback_query
     await query.answer()
     
@@ -929,8 +875,9 @@ async def handle_broadcast_confirmation(update: Update, context: ContextTypes.DE
     if user_id not in ADMIN_IDS:
         return
     
+    print(f"🔧 DEBUG: Confirmation callback: {query.data}")
+    
     if query.data == "confirm_send":
-        # Broadcast to all users
         broadcast_message = context.user_data.get('broadcast_message')
         users = get_all_users()
         
@@ -942,7 +889,6 @@ async def handle_broadcast_confirmation(update: Update, context: ContextTypes.DE
         successful = 0
         failed = 0
         
-        # Send initial progress message
         progress_msg = await query.message.reply_text(f"📤 Starting broadcast...\n0/{total} (0%)")
         
         for i, user in enumerate(users, 1):
@@ -954,7 +900,6 @@ async def handle_broadcast_confirmation(update: Update, context: ContextTypes.DE
                 )
                 successful += 1
                 
-                # Update progress every 5 messages or at the end
                 if i % 5 == 0 or i == total:
                     percentage = (i / total) * 100
                     await progress_msg.edit_text(
@@ -967,7 +912,6 @@ async def handle_broadcast_confirmation(update: Update, context: ContextTypes.DE
                 failed += 1
                 logger.error(f"Failed to send to user {user['user_id']}: {e}")
         
-        # Save broadcast record
         content_preview = ""
         if broadcast_message.text:
             content_preview = broadcast_message.text[:100]
@@ -986,7 +930,6 @@ async def handle_broadcast_confirmation(update: Update, context: ContextTypes.DE
             failed_count=failed
         )
         
-        # Send final report
         report = (
             f"✅ **BROADCAST COMPLETED**\n\n"
             f"📊 **Results:**\n"
@@ -997,7 +940,6 @@ async def handle_broadcast_confirmation(update: Update, context: ContextTypes.DE
             f"📝 Message preview saved in database."
         )
         
-        # Add back to admin button
         keyboard = InlineKeyboardMarkup([
             [InlineKeyboardButton("🔙 Back to Admin Panel", callback_data="back_to_admin")]
         ])
@@ -1005,11 +947,9 @@ async def handle_broadcast_confirmation(update: Update, context: ContextTypes.DE
         await progress_msg.edit_text(report, reply_markup=keyboard)
         await query.message.delete()
         
-        # Clear broadcast data
         context.user_data.clear()
     
     elif query.data == "confirm_specific":
-        # Send to specific user
         broadcast_message = context.user_data.get('broadcast_message')
         target_user_id = context.user_data.get('target_user_id')
         target_user_name = context.user_data.get('target_user_name', 'User')
@@ -1019,14 +959,12 @@ async def handle_broadcast_confirmation(update: Update, context: ContextTypes.DE
             return
         
         try:
-            # Send message to specific user
             await context.bot.copy_message(
                 chat_id=target_user_id,
                 from_chat_id=broadcast_message.chat_id,
                 message_id=broadcast_message.message_id
             )
             
-            # Save record
             content_preview = ""
             if broadcast_message.text:
                 content_preview = broadcast_message.text[:100]
@@ -1058,11 +996,9 @@ async def handle_broadcast_confirmation(update: Update, context: ContextTypes.DE
                 f"The user may have blocked the bot."
             )
         
-        # Clear data
         context.user_data.clear()
     
     elif query.data == "confirm_country":
-        # Broadcast to specific country
         broadcast_message = context.user_data.get('broadcast_message')
         country_code = context.user_data.get('selected_country')
         country_name = context.user_data.get('selected_country_name', 'Unknown')
@@ -1071,7 +1007,6 @@ async def handle_broadcast_confirmation(update: Update, context: ContextTypes.DE
             await query.edit_message_text("❌ Country data not found.")
             return
         
-        # Get users in this country
         users = get_users_by_country(country_code)
         
         if not users:
@@ -1082,7 +1017,6 @@ async def handle_broadcast_confirmation(update: Update, context: ContextTypes.DE
         successful = 0
         failed = 0
         
-        # Send initial progress message
         progress_msg = await query.message.reply_text(
             f"📤 Starting broadcast to {country_name}...\n0/{total} (0%)"
         )
@@ -1096,7 +1030,6 @@ async def handle_broadcast_confirmation(update: Update, context: ContextTypes.DE
                 )
                 successful += 1
                 
-                # Update progress every 5 messages or at the end
                 if i % 5 == 0 or i == total:
                     percentage = (i / total) * 100
                     await progress_msg.edit_text(
@@ -1109,7 +1042,6 @@ async def handle_broadcast_confirmation(update: Update, context: ContextTypes.DE
                 failed += 1
                 logger.error(f"Failed to send to user {user['user_id']} in {country_name}: {e}")
         
-        # Save broadcast record
         content_preview = ""
         if broadcast_message.text:
             content_preview = broadcast_message.text[:100]
@@ -1128,7 +1060,6 @@ async def handle_broadcast_confirmation(update: Update, context: ContextTypes.DE
             failed_count=failed
         )
         
-        # Send final report
         report = (
             f"✅ **COUNTRY BROADCAST COMPLETED**\n\n"
             f"📍 Country: {country_name}\n"
@@ -1140,7 +1071,6 @@ async def handle_broadcast_confirmation(update: Update, context: ContextTypes.DE
             f"📝 Message preview saved in database."
         )
         
-        # Add back to admin button
         keyboard = InlineKeyboardMarkup([
             [InlineKeyboardButton("🔙 Back to Admin Panel", callback_data="back_to_admin")]
         ])
@@ -1148,21 +1078,10 @@ async def handle_broadcast_confirmation(update: Update, context: ContextTypes.DE
         await progress_msg.edit_text(report, reply_markup=keyboard)
         await query.message.delete()
         
-        # Clear broadcast data
         context.user_data.clear()
     
-    elif query.data == "cancel_send":
-        await query.edit_message_text("❌ Broadcast cancelled.")
-        context.user_data.clear()
-        await admin_panel(update, context)
-    
-    elif query.data == "cancel_specific":
-        await query.edit_message_text("❌ Send to user cancelled.")
-        context.user_data.clear()
-        await admin_panel(update, context)
-    
-    elif query.data == "cancel_country":
-        await query.edit_message_text("❌ Country broadcast cancelled.")
+    elif query.data in ["cancel_send", "cancel_specific", "cancel_country"]:
+        await query.edit_message_text("❌ Operation cancelled.")
         context.user_data.clear()
         await admin_panel(update, context)
 
@@ -1179,7 +1098,6 @@ async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # ========== MAIN FUNCTION ==========
 def main():
-    """Start the bot"""
     print("=" * 50)
     print("🤖 AFFILIATE SUPPORT BOT - STARTING")
     print("=" * 50)
@@ -1188,13 +1106,10 @@ def main():
     print(f"💾 Database: {DB_PATH}")
     print("=" * 50)
     
-    # Initialize database
     init_db()
     
-    # Create application
     application = Application.builder().token(TOKEN).build()
     
-    # Add conversation handler for user registration
     conv_handler = ConversationHandler(
         entry_points=[CommandHandler('start', start)],
         states={
@@ -1205,19 +1120,17 @@ def main():
         fallbacks=[CommandHandler('cancel', cancel)]
     )
     
-    # Add all handlers
     application.add_handler(conv_handler)
     application.add_handler(CommandHandler('admin', admin_panel))
     application.add_handler(CommandHandler('cancel', cancel))
     
-    # Admin callback handlers
-    application.add_handler(CallbackQueryHandler(admin_callback_handler, pattern='^broadcast_|^send_|^view_|^close_|^back_|^bcast_country_'))
-    application.add_handler(CallbackQueryHandler(handle_broadcast_confirmation, pattern='^confirm_|^cancel_'))
+    # FIXED: Added proper callback query handlers
+    application.add_handler(CallbackQueryHandler(admin_callback_handler, pattern='^(broadcast_all|send_specific|broadcast_country|view_stats|view_users|close_admin|back_to_admin|bcast_country_.*)$'))
+    application.add_handler(CallbackQueryHandler(handle_broadcast_confirmation, pattern='^(confirm_send|confirm_specific|confirm_country|cancel_send|cancel_specific|cancel_country)$'))
     
-    # Message handlers for users
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_main_menu))
     
-    # Special handler for admin messages (for broadcast input)
+    # FIXED: Changed to handle ALL messages from admin
     application.add_handler(MessageHandler(
         filters.ALL & filters.User(ADMIN_IDS), 
         handle_admin_message
@@ -1225,17 +1138,13 @@ def main():
     
     application.add_error_handler(error_handler)
     
-    # Start bot
     print("🔄 Starting bot polling...")
     print("✅ Bot is RUNNING!")
     print("📱 Test with: /start")
     print("👑 Admin panel: /admin")
     print("=" * 50 + "\n")
     
-    application.run_polling(
-        allowed_updates=Update.ALL_TYPES,
-        drop_pending_updates=True
-    )
+    application.run_polling(allowed_updates=Update.ALL_TYPES, drop_pending_updates=True)
 
 if __name__ == '__main__':
     main()
