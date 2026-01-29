@@ -24,7 +24,7 @@ from telegram.ext import (
 )
 
 # ========== CONFIGURATION ==========
-TOKEN = os.environ.get('TELEGRAM_BOT_TOKEN', '8236723437:AAGMxhUm1uwMeqskhvj3HoGRREu3_5i_g1c')
+TOKEN = os.environ.get('TELEGRAM_BOT_TOKEN', '7858094896:AAHabzaULaYJvh5tlsdgFAiVLmmSy15X7jg')
 ADMIN_IDS = [7771621948]  # Your admin ID
 DB_PATH = 'bot.db'
 
@@ -319,7 +319,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     if user_id in ADMIN_IDS:
         await update.message.reply_text(
-            f"👑 Welcome Admin {user_name}!\nUse /admin to access admin panel.",
+            f"👑 Welcome To Admin Panel {user_name}!\nUse click /admin to get access for admin panel.",
             reply_markup=get_main_menu_keyboard()
         )
         return ConversationHandler.END
@@ -505,8 +505,8 @@ async def show_program_details(update: Update, context: ContextTypes.DEFAULT_TYP
         await update.message.reply_text(
             "📊 **AFFILIATE PROGRAM**\n\n"
             "Join our global affiliate network!\n\n"
-            "• Commission: 20-30%\n"
-            "• Daily payments\n"
+            "• Commission: upto 50%\n"
+            "• Weekly payments\n"
             "• Marketing tools provided\n"
             "• 24/7 support\n\n"
             "Register with /start to see country-specific offers!"
