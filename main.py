@@ -174,7 +174,7 @@ COUNTRIES = {
     'IN': '🇮🇳 IN',
     'PK': '🇵🇰 PAK',
     'PH': '🇵🇭 PHI',
-    'LK': '🇱🇰 Sri',
+    'LK': '🇱🇰 SRI',
     'MY': '🇲🇾 MAL',
     'TH': '🇹🇭 THA',
     'NG': '🇳🇬 NIG',
@@ -545,6 +545,7 @@ async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return ConversationHandler.END
 
 async def admin_callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle admin callback queries"""
     query = update.callback_query
     await query.answer()
     
@@ -682,65 +683,91 @@ async def admin_callback_handler(update: Update, context: ContextTypes.DEFAULT_T
         )
 
 async def handle_admin_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle ALL admin messages - FIXED VERSION"""
+    """Handle ALL admin messages - COMPLETELY FIXED VERSION"""
     user_id = update.effective_user.id
     
     if user_id not in ADMIN_IDS:
         return
     
-    print(f"🔧 DEBUG: Admin message received. State: {context.user_data}")
+    # Skip if it's a command
+    if update.message.text and update.message.text.startswith('/'):
+        return
     
-    # Handle user ID input for specific user
+    # ===== FIXED: Handle user ID input for specific user =====
     if context.user_data.get('awaiting_user_id'):
-        print("🔧 DEBUG: Processing user ID input")
         try:
-            text = update.message.text.strip()
-            numbers = re.findall(r'\d+', text)
-            
-            if not numbers:
+            # Check if message has text
+            if not update.message.text:
                 await update.message.reply_text(
-                    "❌ No valid User ID found in your message.\n"
-                    "Please send only the numeric User ID (e.g., 123456789)\n"
-                    "or /cancel to cancel."
+                    "❌ Please send a numeric User ID.\n"
+                    "Example: 123456789\n\n"
+                    "To cancel, send /cancel"
                 )
                 return
             
-            target_user_id = int(numbers[0])
+            # Get the text
+            user_input = update.message.text.strip()
             
+            # Extract ONLY digits from the input
+            digits_only = ''.join(filter(str.isdigit, user_input))
+            
+            if not digits_only:
+                await update.message.reply_text(
+                    "❌ No numbers found in your message.\n"
+                    "Please send only the User ID (numbers only).\n"
+                    "Example: 8477793739\n\n"
+                    "To cancel, send /cancel"
+                )
+                return
+            
+            # Convert to integer
+            target_user_id = int(digits_only)
+            
+            # Check if user exists in database
             user = get_user(target_user_id)
+            
             if not user:
                 await update.message.reply_text(
-                    f"❌ User ID {target_user_id} not found in database.\n"
-                    f"Please send a valid User ID or /cancel"
+                    f"❌ User ID {target_user_id} not found in database.\n\n"
+                    f"💡 Check 'View User List' for available users.\n\n"
+                    f"To cancel, send /cancel"
                 )
                 return
             
+            # Store user info and move to message input
             context.user_data['target_user_id'] = target_user_id
             context.user_data['target_user_name'] = user['name']
             context.user_data['awaiting_user_id'] = False
             context.user_data['awaiting_message'] = True
             
             await update.message.reply_text(
-                f"✅ User found: {user['name']} (ID: {target_user_id})\n\n"
-                "Now send the message for this user:\n\n"
-                "To cancel, send /cancel"
-            )
-            return
-        except ValueError as e:
-            await update.message.reply_text(
-                f"❌ Invalid input. Please send only the numeric User ID (e.g., 123456789)\n"
-                f"Error: {str(e)}\n\n"
+                f"✅ **USER FOUND**\n\n"
+                f"👤 Name: {user['name']}\n"
+                f"🆔 User ID: {target_user_id}\n\n"
+                f"Now send your message for this user:\n\n"
+                f"You can send:\n"
+                f"• Text message\n"
+                f"• Photo with caption\n"
+                f"• Video with caption\n"
+                f"• Document\n\n"
                 f"To cancel, send /cancel"
             )
             return
+            
+        except Exception as e:
+            await update.message.reply_text(
+                f"❌ Error: {str(e)}\n\n"
+                "Please send only numbers (e.g., 8477793739)\n\n"
+                "To cancel, send /cancel"
+            )
+            return
     
-    # Handle message input for broadcast - FIXED: Check ALL message types
+    # ===== Handle message input for broadcast =====
     if context.user_data.get('awaiting_message'):
-        print(f"🔧 DEBUG: Processing broadcast message. Type: {context.user_data.get('broadcast_type')}")
-        
         broadcast_type = context.user_data.get('broadcast_type')
         
         if broadcast_type == 'all':
+            # Broadcast to all users
             users = get_all_users()
             total_users = len(users)
             
@@ -766,8 +793,6 @@ async def handle_admin_message(update: Update, context: ContextTypes.DEFAULT_TYP
             else:
                 message_text = "Media message"
             
-            print(f"🔧 DEBUG: Sending confirmation for all users broadcast")
-            
             await update.message.reply_text(
                 f"⚠️ **CONFIRM BROADCAST**\n\n"
                 f"Send this message to ALL {total_users} users?\n\n"
@@ -778,6 +803,7 @@ async def handle_admin_message(update: Update, context: ContextTypes.DEFAULT_TYP
             )
             
         elif broadcast_type == 'specific':
+            # Send to specific user
             target_user_id = context.user_data.get('target_user_id')
             target_user_name = context.user_data.get('target_user_name', 'User')
             
@@ -802,8 +828,6 @@ async def handle_admin_message(update: Update, context: ContextTypes.DEFAULT_TYP
             else:
                 message_text = "Media message"
             
-            print(f"🔧 DEBUG: Sending confirmation for specific user broadcast")
-            
             await update.message.reply_text(
                 f"⚠️ **CONFIRM SEND**\n\n"
                 f"Send this message to {target_user_name} (ID: {target_user_id})?\n\n"
@@ -813,6 +837,7 @@ async def handle_admin_message(update: Update, context: ContextTypes.DEFAULT_TYP
             )
         
         elif broadcast_type == 'country':
+            # Send to specific country
             country_code = context.user_data.get('selected_country')
             country_name = context.user_data.get('selected_country_name', 'Unknown')
             
@@ -849,8 +874,6 @@ async def handle_admin_message(update: Update, context: ContextTypes.DEFAULT_TYP
             else:
                 message_text = "Media message"
             
-            print(f"🔧 DEBUG: Sending confirmation for country broadcast")
-            
             await update.message.reply_text(
                 f"⚠️ **CONFIRM COUNTRY BROADCAST**\n\n"
                 f"Send this message to {total_users} users in {country_name}?\n\n"
@@ -862,12 +885,11 @@ async def handle_admin_message(update: Update, context: ContextTypes.DEFAULT_TYP
         
         return
     
-    # If no special state, check if it's a regular admin command reply
-    print(f"🔧 DEBUG: No special state detected, showing admin panel")
+    # If no special state, show admin panel
     await admin_panel(update, context)
 
 async def handle_broadcast_confirmation(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle broadcast confirmation - FIXED VERSION"""
+    """Handle broadcast confirmation"""
     query = update.callback_query
     await query.answer()
     
@@ -875,9 +897,8 @@ async def handle_broadcast_confirmation(update: Update, context: ContextTypes.DE
     if user_id not in ADMIN_IDS:
         return
     
-    print(f"🔧 DEBUG: Confirmation callback: {query.data}")
-    
     if query.data == "confirm_send":
+        # Broadcast to all users
         broadcast_message = context.user_data.get('broadcast_message')
         users = get_all_users()
         
@@ -950,6 +971,7 @@ async def handle_broadcast_confirmation(update: Update, context: ContextTypes.DE
         context.user_data.clear()
     
     elif query.data == "confirm_specific":
+        # Send to specific user
         broadcast_message = context.user_data.get('broadcast_message')
         target_user_id = context.user_data.get('target_user_id')
         target_user_name = context.user_data.get('target_user_name', 'User')
@@ -999,6 +1021,7 @@ async def handle_broadcast_confirmation(update: Update, context: ContextTypes.DE
         context.user_data.clear()
     
     elif query.data == "confirm_country":
+        # Broadcast to specific country
         broadcast_message = context.user_data.get('broadcast_message')
         country_code = context.user_data.get('selected_country')
         country_name = context.user_data.get('selected_country_name', 'Unknown')
@@ -1087,6 +1110,10 @@ async def handle_broadcast_confirmation(update: Update, context: ContextTypes.DE
 
 async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     logger.error(f"Error: {context.error}")
+    # Print full error details
+    import traceback
+    traceback.print_exception(type(context.error), context.error, context.error.__traceback__)
+    
     try:
         if update and update.effective_user:
             await context.bot.send_message(
@@ -1124,13 +1151,14 @@ def main():
     application.add_handler(CommandHandler('admin', admin_panel))
     application.add_handler(CommandHandler('cancel', cancel))
     
-    # FIXED: Added proper callback query handlers
+    # Admin callback handlers
     application.add_handler(CallbackQueryHandler(admin_callback_handler, pattern='^(broadcast_all|send_specific|broadcast_country|view_stats|view_users|close_admin|back_to_admin|bcast_country_.*)$'))
     application.add_handler(CallbackQueryHandler(handle_broadcast_confirmation, pattern='^(confirm_send|confirm_specific|confirm_country|cancel_send|cancel_specific|cancel_country)$'))
     
+    # Message handlers for users
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_main_menu))
     
-    # FIXED: Changed to handle ALL messages from admin
+    # Handler for admin messages
     application.add_handler(MessageHandler(
         filters.ALL & filters.User(ADMIN_IDS), 
         handle_admin_message
