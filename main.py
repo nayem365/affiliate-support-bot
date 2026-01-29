@@ -168,18 +168,18 @@ PHONE, LANGUAGE, COUNTRY = range(3)
 
 # ========== COUNTRY & LANGUAGE DATA ==========
 COUNTRIES = {
-    'ENG': '🇬🇧 United Kingdom',
-    'RU': '🇷🇺 Russia',
-    'BD': '🇧🇩 Bangladesh',
-    'IN': '🇮🇳 India',
-    'PK': '🇵🇰 Pakistan',
-    'PH': '🇵🇭 Philippines',
-    'LK': '🇱🇰 Sri Lanka',
-    'MY': '🇲🇾 Malaysia',
-    'TH': '🇹🇭 Thailand',
-    'NG': '🇳🇬 Nigeria',
-    'TR': '🇹🇷 Turkey',
-    'KE': '🇰🇪 Kenya'
+    'ENG': '🇬🇧 UK',
+    'RU': '🇷🇺 RU',
+    'BD': '🇧🇩 BD',
+    'IN': '🇮🇳 IN',
+    'PK': '🇵🇰 PAK',
+    'PH': '🇵🇭 PHI',
+    'LK': '🇱🇰 Sri',
+    'MY': '🇲🇾 MAL',
+    'TH': '🇹🇭 THA',
+    'NG': '🇳🇬 NIG',
+    'TR': '🇹🇷 TUR',
+    'KE': '🇰🇪 KEN'
 }
 
 LANGUAGES = {
