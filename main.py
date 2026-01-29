@@ -2,7 +2,7 @@ import os
 import sys
 import logging
 import sqlite3
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Dict, Any, List, Optional
 
 from telegram import (
@@ -23,24 +23,8 @@ from telegram.ext import (
 )
 
 # ========== CONFIGURATION ==========
-
-import os
-import logging
-
-# Get token from environment variable with fallback for testing
 TOKEN = os.environ.get('TELEGRAM_BOT_TOKEN', '8236723437:AAGMxhUm1uwMeqskhvj3HoGRREu3_5i_g1c')
-
-ADMIN_IDS = []
-
-try:
-    admin_ids_str = os.environ.get('ADMIN_IDS', '7771621948')
-    ADMIN_IDS = [int(x.strip()) for x in admin_ids_str.split(',') if x.strip()]
-except:
-    ADMIN_IDS = [7771621948]
-
-print(f"Bot Token starts with: {TOKEN[:10]}...")  # Show only first 10 chars for security
-print(f"Admin IDs: {ADMIN_IDS}")
-
+ADMIN_IDS = [7771621948]  # Your admin ID
 DB_PATH = 'bot.db'
 
 # Enable logging
@@ -76,11 +60,15 @@ def init_db():
     ''')
     
     cursor.execute('''
-        CREATE TABLE IF NOT EXISTS messages (
+        CREATE TABLE IF NOT EXISTS broadcasts (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            user_id INTEGER,
+            admin_id INTEGER,
+            target_type TEXT,
+            target_id TEXT,
             message_type TEXT,
             content TEXT,
+            sent_count INTEGER,
+            failed_count INTEGER,
             sent_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     ''')
@@ -155,8 +143,19 @@ def update_user_activity(user_id: int):
     conn.commit()
     conn.close()
 
+def save_broadcast(admin_id: int, target_type: str, target_id: str, message_type: str, content: str, sent_count: int, failed_count: int):
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute('''
+        INSERT INTO broadcasts (admin_id, target_type, target_id, message_type, content, sent_count, failed_count)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+    ''', (admin_id, target_type, target_id, message_type, content, sent_count, failed_count))
+    conn.commit()
+    conn.close()
+
 # ========== CONVERSATION STATES ==========
 PHONE, LANGUAGE, COUNTRY = range(3)
+ADMIN_BROADCAST, ADMIN_SPECIFIC_USER = range(2)
 
 # ========== COUNTRY & LANGUAGE DATA ==========
 COUNTRIES = {
@@ -238,10 +237,29 @@ def get_main_menu_keyboard():
 def get_admin_keyboard():
     """Admin menu keyboard"""
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton("📢 Broadcast to All Users", callback_data="admin_broadcast_all")],
-        [InlineKeyboardButton("📊 User Statistics", callback_data="admin_stats")],
-        [InlineKeyboardButton("👥 User List", callback_data="admin_user_list")],
-        [InlineKeyboardButton("🔙 Back to Main", callback_data="admin_back_main")]
+        [InlineKeyboardButton("📢 Send Message to All Users", callback_data="broadcast_all")],
+        [InlineKeyboardButton("👤 Send Message to Specific User", callback_data="send_specific")],
+        [InlineKeyboardButton("📊 View Statistics", callback_data="view_stats")],
+        [InlineKeyboardButton("👥 View User List", callback_data="view_users")],
+        [InlineKeyboardButton("❌ Close Admin Panel", callback_data="close_admin")]
+    ])
+
+def get_broadcast_confirm_keyboard():
+    """Broadcast confirmation keyboard"""
+    return InlineKeyboardMarkup([
+        [
+            InlineKeyboardButton("✅ Yes, Send Now", callback_data="confirm_send"),
+            InlineKeyboardButton("❌ Cancel", callback_data="cancel_send")
+        ]
+    ])
+
+def get_specific_user_confirm_keyboard():
+    """Specific user confirmation keyboard"""
+    return InlineKeyboardMarkup([
+        [
+            InlineKeyboardButton("✅ Yes, Send to This User", callback_data="confirm_specific"),
+            InlineKeyboardButton("❌ Cancel", callback_data="cancel_specific")
+        ]
     ])
 
 # ========== HANDLERS ==========
@@ -471,7 +489,12 @@ async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Cancel conversation"""
     user_id = update.effective_user.id
     clear_user_state(user_id)
-    await update.message.reply_text("Registration cancelled. Use /start to begin.")
+    
+    # Clear any admin states
+    if context.user_data.get('admin_mode'):
+        context.user_data.clear()
+    
+    await update.message.reply_text("Operation cancelled. Use /start to begin or /admin for admin panel.")
     return ConversationHandler.END
 
 # ========== ADMIN HANDLERS ==========
@@ -482,9 +505,9 @@ async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("❌ Access denied. You are not an admin.")
         return
     
-    # Clear any existing broadcast state
-    if 'awaiting_broadcast' in context.user_data:
-        context.user_data.pop('awaiting_broadcast', None)
+    # Clear any previous states
+    context.user_data.clear()
+    context.user_data['admin_mode'] = True
     
     total_users = get_total_users()
     
@@ -492,9 +515,10 @@ async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"👑 **ADMIN PANEL**\n\n"
         f"Welcome, Admin {user_id}!\n"
         f"Total Users: {total_users}\n\n"
-        f"Select an action:",
+        f"Select an option:",
         reply_markup=get_admin_keyboard()
     )
+    return ConversationHandler.END
 
 async def admin_callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle admin callback queries"""
@@ -506,19 +530,35 @@ async def admin_callback_handler(update: Update, context: ContextTypes.DEFAULT_T
         await query.edit_message_text("❌ Access denied.")
         return
     
-    if query.data == "admin_broadcast_all":
-        # Set state to await broadcast message
-        context.user_data['awaiting_broadcast'] = True
+    if query.data == "broadcast_all":
+        # Set state for broadcast to all users
+        context.user_data['awaiting_message'] = True
         context.user_data['broadcast_type'] = 'all'
         
         await query.edit_message_text(
-            "📢 **BROADCAST TO ALL USERS**\n\n"
-            "Please send the message you want to broadcast to ALL registered users.\n"
-            "You can send text, photo, video, or document.\n\n"
+            "📢 **SEND MESSAGE TO ALL USERS**\n\n"
+            "Please send the message you want to broadcast to ALL registered users.\n\n"
+            "You can send:\n"
+            "• Text message\n"
+            "• Photo with caption\n"
+            "• Video with caption\n"
+            "• Document\n\n"
             "To cancel, send /cancel"
         )
     
-    elif query.data == "admin_stats":
+    elif query.data == "send_specific":
+        # Set state for specific user
+        context.user_data['awaiting_user_id'] = True
+        context.user_data['broadcast_type'] = 'specific'
+        
+        await query.edit_message_text(
+            "👤 **SEND MESSAGE TO SPECIFIC USER**\n\n"
+            "Please send the User ID first:\n"
+            "(Get User IDs from 'View User List' option)\n\n"
+            "To cancel, send /cancel"
+        )
+    
+    elif query.data == "view_stats":
         total = get_total_users()
         users = get_all_users()
         
@@ -528,113 +568,160 @@ async def admin_callback_handler(update: Update, context: ContextTypes.DEFAULT_T
             country = user.get('country', 'Unknown')
             country_stats[country] = country_stats.get(country, 0) + 1
         
-        # Calculate active users (last 7 days)
+        # Calculate active users (last 24 hours)
         active_users = 0
-        week_ago = datetime.now().timestamp() - (7 * 24 * 60 * 60)
+        day_ago = datetime.now() - timedelta(hours=24)
         
         stats_text = "📊 **USER STATISTICS**\n\n"
         stats_text += f"👥 Total Users: {total}\n"
         
         if total > 0:
-            stats_text += f"📈 Active (last 7 days): {active_users} ({(active_users/total*100):.1f}%)\n\n"
+            # Count users by registration date (last 7 days)
+            week_ago = datetime.now() - timedelta(days=7)
+            new_users = 0
+            
+            stats_text += f"📈 Active (last 24h): {active_users}\n"
+            stats_text += f"🆕 New (last 7 days): {new_users}\n\n"
             stats_text += "🌍 **Users by Country:**\n"
             for country, count in sorted(country_stats.items(), key=lambda x: x[1], reverse=True):
                 country_name = COUNTRIES.get(country, country)
-                stats_text += f"• {country_name}: {count} ({(count/total*100):.1f}%)\n"
+                percentage = (count / total) * 100
+                stats_text += f"• {country_name}: {count} ({percentage:.1f}%)\n"
         else:
             stats_text += "\nNo users registered yet."
         
         # Add back button
         keyboard = InlineKeyboardMarkup([
-            [InlineKeyboardButton("🔙 Back to Admin Panel", callback_data="admin_back_panel")]
+            [InlineKeyboardButton("🔙 Back to Admin Panel", callback_data="back_to_admin")]
         ])
         
         await query.edit_message_text(stats_text, reply_markup=keyboard)
     
-    elif query.data == "admin_user_list":
+    elif query.data == "view_users":
         users = get_all_users()
         if not users:
             await query.edit_message_text("📋 No users registered yet.")
             return
         
-        message = "📋 **RECENTLY REGISTERED USERS**\n\n"
-        for i, user in enumerate(users[:15], 1):
+        # Show first 10 users
+        message = "📋 **REGISTERED USERS**\n\n"
+        for i, user in enumerate(users[:10], 1):
             country = COUNTRIES.get(user.get('country', 'Unknown'), user.get('country', 'Unknown'))
             reg_date = datetime.strptime(user['registered_at'], '%Y-%m-%d %H:%M:%S').strftime('%d/%m/%Y')
-            message += f"{i}. {user['name']}\n"
+            message += f"{i}. **{user['name']}**\n"
+            message += f"   🆔 `{user['user_id']}`\n"
             message += f"   🌍 {country}\n"
             message += f"   📱 {user.get('phone', 'N/A')}\n"
-            message += f"   📅 {reg_date}\n"
-            message += f"   🆔 `{user['user_id']}`\n\n"
+            message += f"   📅 Registered: {reg_date}\n\n"
         
-        if len(users) > 15:
-            message += f"📄 ... and {len(users)-15} more users"
+        if len(users) > 10:
+            message += f"📄 ... and {len(users)-10} more users"
         
         # Add back button
         keyboard = InlineKeyboardMarkup([
-            [InlineKeyboardButton("🔙 Back to Admin Panel", callback_data="admin_back_panel")]
+            [InlineKeyboardButton("🔙 Back to Admin Panel", callback_data="back_to_admin")]
         ])
         
         await query.edit_message_text(message, reply_markup=keyboard)
     
-    elif query.data == "admin_back_main":
-        await query.edit_message_text("Returning to main menu...")
+    elif query.data == "close_admin":
+        context.user_data.clear()
+        await query.edit_message_text("✅ Admin panel closed.")
         await show_main_menu(update, context)
     
-    elif query.data == "admin_back_panel":
+    elif query.data == "back_to_admin":
         total_users = get_total_users()
         
         await query.edit_message_text(
             f"👑 **ADMIN PANEL**\n\n"
             f"Welcome, Admin {user_id}!\n"
             f"Total Users: {total_users}\n\n"
-            f"Select an action:",
+            f"Select an option:",
             reply_markup=get_admin_keyboard()
         )
 
 async def handle_admin_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle admin broadcast messages"""
+    """Handle admin messages for broadcast"""
     user_id = update.effective_user.id
     
     if user_id not in ADMIN_IDS:
         return
     
-    # Check if admin is waiting to send broadcast
-    if context.user_data.get('awaiting_broadcast'):
-        broadcast_type = context.user_data.get('broadcast_type', 'all')
-        
-        # Get all users
-        all_users = get_all_users()
-        
-        if not all_users:
-            await update.message.reply_text("❌ No users to broadcast to.")
-            context.user_data.pop('awaiting_broadcast', None)
-            context.user_data.pop('broadcast_type', None)
+    # Handle user ID input for specific user
+    if context.user_data.get('awaiting_user_id'):
+        try:
+            target_user_id = int(update.message.text)
+            
+            # Check if user exists
+            user = get_user(target_user_id)
+            if not user:
+                await update.message.reply_text(
+                    f"❌ User ID {target_user_id} not found in database.\n"
+                    f"Please send a valid User ID or /cancel"
+                )
+                return
+            
+            context.user_data['target_user_id'] = target_user_id
+            context.user_data['target_user_name'] = user['name']
+            context.user_data['awaiting_user_id'] = False
+            context.user_data['awaiting_message'] = True
+            
+            await update.message.reply_text(
+                f"✅ User found: {user['name']} (ID: {target_user_id})\n\n"
+                "Now send the message for this user:\n\n"
+                "To cancel, send /cancel"
+            )
             return
+        except ValueError:
+            await update.message.reply_text("❌ Invalid User ID. Please send a numeric ID or /cancel")
+            return
+    
+    # Handle message input for broadcast
+    if context.user_data.get('awaiting_message'):
+        broadcast_type = context.user_data.get('broadcast_type')
         
-        total_users = len(all_users)
+        if broadcast_type == 'all':
+            # Broadcast to all users
+            users = get_all_users()
+            total_users = len(users)
+            
+            if total_users == 0:
+                await update.message.reply_text("❌ No users to broadcast to.")
+                context.user_data.clear()
+                return
+            
+            # Store message for confirmation
+            context.user_data['broadcast_message'] = update.message
+            context.user_data['total_users'] = total_users
+            
+            await update.message.reply_text(
+                f"⚠️ **CONFIRM BROADCAST**\n\n"
+                f"Send this message to ALL {total_users} users?\n\n"
+                f"**Message Preview:**\n"
+                f"{update.message.text[:200] if update.message.text else '📎 Media message'}...\n\n"
+                f"This action cannot be undone!",
+                reply_markup=get_broadcast_confirm_keyboard()
+            )
+            
+        elif broadcast_type == 'specific':
+            # Send to specific user
+            target_user_id = context.user_data.get('target_user_id')
+            target_user_name = context.user_data.get('target_user_name', 'User')
+            
+            # Store message for confirmation
+            context.user_data['broadcast_message'] = update.message
+            
+            await update.message.reply_text(
+                f"⚠️ **CONFIRM SEND**\n\n"
+                f"Send this message to {target_user_name} (ID: {target_user_id})?\n\n"
+                f"**Message Preview:**\n"
+                f"{update.message.text[:200] if update.message.text else '📎 Media message'}...",
+                reply_markup=get_specific_user_confirm_keyboard()
+            )
         
-        # Ask for confirmation
-        confirm_keyboard = InlineKeyboardMarkup([
-            [InlineKeyboardButton("✅ YES, SEND NOW", callback_data="confirm_broadcast")],
-            [InlineKeyboardButton("❌ CANCEL", callback_data="cancel_broadcast")]
-        ])
-        
-        # Store message for confirmation
-        context.user_data['broadcast_message'] = update.message
-        context.user_data['broadcast_users'] = all_users
-        
-        await update.message.reply_text(
-            f"⚠️ **CONFIRM BROADCAST**\n\n"
-            f"Send this message to ALL {total_users} users?\n\n"
-            f"**Message Preview:**\n"
-            f"{update.message.text[:200] if update.message.text else '📎 Media message'}...\n\n"
-            f"This action cannot be undone!",
-            reply_markup=confirm_keyboard
-        )
         return
     
-    # If not in broadcast mode, just show admin panel
+    # If not in any admin mode, show admin panel
     await admin_panel(update, context)
 
 async def handle_broadcast_confirmation(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -646,9 +733,10 @@ async def handle_broadcast_confirmation(update: Update, context: ContextTypes.DE
     if user_id not in ADMIN_IDS:
         return
     
-    if query.data == "confirm_broadcast":
+    if query.data == "confirm_send":
+        # Broadcast to all users
         broadcast_message = context.user_data.get('broadcast_message')
-        users = context.user_data.get('broadcast_users', [])
+        users = get_all_users()
         
         if not broadcast_message or not users:
             await query.edit_message_text("❌ Broadcast data not found.")
@@ -657,7 +745,6 @@ async def handle_broadcast_confirmation(update: Update, context: ContextTypes.DE
         total = len(users)
         successful = 0
         failed = 0
-        failed_users = []
         
         # Send initial progress message
         progress_msg = await query.message.reply_text(f"📤 Starting broadcast...\n0/{total} (0%)")
@@ -671,87 +758,108 @@ async def handle_broadcast_confirmation(update: Update, context: ContextTypes.DE
                 )
                 successful += 1
                 
-                # Update progress every 10 messages or at the end
-                if i % 10 == 0 or i == total:
+                # Update progress every 5 messages or at the end
+                if i % 5 == 0 or i == total:
                     percentage = (i / total) * 100
                     await progress_msg.edit_text(
                         f"📤 Broadcasting...\n"
                         f"{i}/{total} ({percentage:.1f}%)\n"
-                        f"✅ {successful} successful\n"
-                        f"❌ {failed} failed"
+                        f"✅ {successful} successful"
                     )
                     
             except Exception as e:
                 failed += 1
-                failed_users.append(f"{user['name']} ({user['user_id']})")
                 logger.error(f"Failed to send to user {user['user_id']}: {e}")
-                
-                # Still update progress on errors
-                if i % 10 == 0 or i == total:
-                    percentage = (i / total) * 100
-                    await progress_msg.edit_text(
-                        f"📤 Broadcasting...\n"
-                        f"{i}/{total} ({percentage:.1f}%)\n"
-                        f"✅ {successful} successful\n"
-                        f"❌ {failed} failed"
-                    )
+        
+        # Save broadcast record
+        content_preview = broadcast_message.text[:100] if broadcast_message.text else "Media message"
+        save_broadcast(
+            admin_id=user_id,
+            target_type='all',
+            target_id='all',
+            message_type='broadcast',
+            content=content_preview,
+            sent_count=successful,
+            failed_count=failed
+        )
         
         # Send final report
         report = (
             f"✅ **BROADCAST COMPLETED**\n\n"
             f"📊 **Results:**\n"
-            f"• Total recipients: {total}\n"
+            f"• Total users: {total}\n"
             f"• Successfully sent: {successful}\n"
             f"• Failed: {failed}\n"
             f"• Success rate: {(successful/total*100):.1f}%\n\n"
+            f"📝 Message preview saved in database."
         )
-        
-        if failed > 0:
-            report += f"❌ **Failed users (first 10):**\n"
-            for failed_user in failed_users[:10]:
-                report += f"• {failed_user}\n"
-            
-            if len(failed_users) > 10:
-                report += f"... and {len(failed_users) - 10} more"
         
         # Add back to admin button
         keyboard = InlineKeyboardMarkup([
-            [InlineKeyboardButton("🔙 Back to Admin Panel", callback_data="admin_back_panel")]
+            [InlineKeyboardButton("🔙 Back to Admin Panel", callback_data="back_to_admin")]
         ])
         
         await progress_msg.edit_text(report, reply_markup=keyboard)
         await query.message.delete()
         
         # Clear broadcast data
-        context.user_data.pop('awaiting_broadcast', None)
-        context.user_data.pop('broadcast_type', None)
-        context.user_data.pop('broadcast_message', None)
-        context.user_data.pop('broadcast_users', None)
+        context.user_data.clear()
     
-    elif query.data == "cancel_broadcast":
+    elif query.data == "confirm_specific":
+        # Send to specific user
+        broadcast_message = context.user_data.get('broadcast_message')
+        target_user_id = context.user_data.get('target_user_id')
+        target_user_name = context.user_data.get('target_user_name', 'User')
+        
+        if not broadcast_message or not target_user_id:
+            await query.edit_message_text("❌ User data not found.")
+            return
+        
+        try:
+            # Send message to specific user
+            await context.bot.copy_message(
+                chat_id=target_user_id,
+                from_chat_id=broadcast_message.chat_id,
+                message_id=broadcast_message.message_id
+            )
+            
+            # Save record
+            content_preview = broadcast_message.text[:100] if broadcast_message.text else "Media message"
+            save_broadcast(
+                admin_id=user_id,
+                target_type='specific',
+                target_id=str(target_user_id),
+                message_type='direct',
+                content=content_preview,
+                sent_count=1,
+                failed_count=0
+            )
+            
+            await query.edit_message_text(
+                f"✅ **MESSAGE SENT SUCCESSFULLY**\n\n"
+                f"To: {target_user_name} (ID: {target_user_id})\n\n"
+                f"Message preview saved in database."
+            )
+            
+        except Exception as e:
+            await query.edit_message_text(
+                f"❌ **FAILED TO SEND MESSAGE**\n\n"
+                f"Error: {str(e)}\n\n"
+                f"The user may have blocked the bot."
+            )
+        
+        # Clear data
+        context.user_data.clear()
+    
+    elif query.data == "cancel_send":
         await query.edit_message_text("❌ Broadcast cancelled.")
-        
-        # Clear broadcast data
-        context.user_data.pop('awaiting_broadcast', None)
-        context.user_data.pop('broadcast_type', None)
-        context.user_data.pop('broadcast_message', None)
-        context.user_data.pop('broadcast_users', None)
-
-async def handle_cancel_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle /cancel command for admin"""
-    user_id = update.effective_user.id
-    
-    if user_id in ADMIN_IDS and context.user_data.get('awaiting_broadcast'):
-        # Clear broadcast state
-        context.user_data.pop('awaiting_broadcast', None)
-        context.user_data.pop('broadcast_type', None)
-        context.user_data.pop('broadcast_message', None)
-        context.user_data.pop('broadcast_users', None)
-        
-        await update.message.reply_text("✅ Broadcast cancelled.")
+        context.user_data.clear()
         await admin_panel(update, context)
-    else:
-        await cancel(update, context)
+    
+    elif query.data == "cancel_specific":
+        await query.edit_message_text("❌ Send to user cancelled.")
+        context.user_data.clear()
+        await admin_panel(update, context)
 
 async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     logger.error(f"Error: {context.error}")
@@ -781,7 +889,7 @@ def main():
     # Create application
     application = Application.builder().token(TOKEN).build()
     
-    # Add conversation handler
+    # Add conversation handler for user registration
     conv_handler = ConversationHandler(
         entry_points=[CommandHandler('start', start)],
         states={
@@ -789,22 +897,22 @@ def main():
             LANGUAGE: [CallbackQueryHandler(handle_language_selection, pattern='^lang_')],
             COUNTRY: [CallbackQueryHandler(handle_country_selection, pattern='^country_')]
         },
-        fallbacks=[CommandHandler('cancel', handle_cancel_command)]
+        fallbacks=[CommandHandler('cancel', cancel)]
     )
     
     # Add all handlers
     application.add_handler(conv_handler)
     application.add_handler(CommandHandler('admin', admin_panel))
-    application.add_handler(CommandHandler('cancel', handle_cancel_command))
+    application.add_handler(CommandHandler('cancel', cancel))
     
-    # Admin callbacks
-    application.add_handler(CallbackQueryHandler(admin_callback_handler, pattern='^admin_'))
-    application.add_handler(CallbackQueryHandler(handle_broadcast_confirmation, pattern='^confirm_broadcast$|^cancel_broadcast$'))
+    # Admin callback handlers
+    application.add_handler(CallbackQueryHandler(admin_callback_handler, pattern='^broadcast_|^send_|^view_|^close_|^back_'))
+    application.add_handler(CallbackQueryHandler(handle_broadcast_confirmation, pattern='^confirm_|^cancel_'))
     
-    # Message handlers
+    # Message handlers for users
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_main_menu))
     
-    # Special handler for admin messages (must be added last to capture all admin messages)
+    # Special handler for admin messages (for broadcast input)
     application.add_handler(MessageHandler(
         filters.ALL & filters.User(ADMIN_IDS) & ~filters.COMMAND, 
         handle_admin_message
