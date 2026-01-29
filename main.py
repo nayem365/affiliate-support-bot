@@ -2,6 +2,7 @@ import os
 import sys
 import logging
 import sqlite3
+import re
 from datetime import datetime, timedelta
 from typing import Dict, Any, List, Optional
 
@@ -164,7 +165,6 @@ def save_broadcast(admin_id: int, target_type: str, target_id: str, message_type
 
 # ========== CONVERSATION STATES ==========
 PHONE, LANGUAGE, COUNTRY = range(3)
-ADMIN_BROADCAST, ADMIN_SPECIFIC_USER = range(2)
 
 # ========== COUNTRY & LANGUAGE DATA ==========
 COUNTRIES = {
@@ -747,7 +747,6 @@ async def handle_admin_message(update: Update, context: ContextTypes.DEFAULT_TYP
             text = update.message.text.strip()
             
             # Try to find a number in the text
-            import re
             numbers = re.findall(r'\d+', text)
             
             if not numbers:
@@ -1152,8 +1151,18 @@ async def handle_broadcast_confirmation(update: Update, context: ContextTypes.DE
         # Clear broadcast data
         context.user_data.clear()
     
-    elif query.data == "cancel_send" or query.data == "cancel_specific" or query.data == "cancel_country":
-        await query.edit_message_text("❌ Operation cancelled.")
+    elif query.data == "cancel_send":
+        await query.edit_message_text("❌ Broadcast cancelled.")
+        context.user_data.clear()
+        await admin_panel(update, context)
+    
+    elif query.data == "cancel_specific":
+        await query.edit_message_text("❌ Send to user cancelled.")
+        context.user_data.clear()
+        await admin_panel(update, context)
+    
+    elif query.data == "cancel_country":
+        await query.edit_message_text("❌ Country broadcast cancelled.")
         context.user_data.clear()
         await admin_panel(update, context)
 
