@@ -989,7 +989,7 @@ async def handle_admin_message(update: Update, context: ContextTypes.DEFAULT_TYP
             elif update.message.document:
                 message_text = "📄 Document"
             else:
-                message_text = "Media message
+                message_text = "Media message"
             
             await update.message.reply_text(
                 f"⚠️ **CONFIRM SEND**\n\n"
@@ -1035,7 +1035,7 @@ async def handle_admin_message(update: Update, context: ContextTypes.DEFAULT_TYP
             elif update.message.document:
                 message_text = "📄 Document"
             else:
-                message_text = "Media message
+                message_text = "Media message"
             
             await update.message.reply_text(
                 f"⚠️ **CONFIRM COUNTRY BROADCAST**\n\n"
