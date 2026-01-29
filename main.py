@@ -24,9 +24,13 @@ from telegram.ext import (
 
 # ========== CONFIGURATION ==========
 
-TOKEN = os.environ['TELEGRAM_BOT_TOKEN']
+import os
+import logging
 
-ADMIN_IDS = [7771621948]
+# Get token from environment variable with fallback for testing
+TOKEN = os.environ.get('TELEGRAM_BOT_TOKEN', '8236723437:AAGMxhUm1uwMeqskhvj3HoGRREu3_5i_g1c')
+
+ADMIN_IDS = []
 
 try:
     admin_ids_str = os.environ.get('ADMIN_IDS', '7771621948')
@@ -34,7 +38,7 @@ try:
 except:
     ADMIN_IDS = [7771621948]
 
-print(f"Bot Token: {TOKEN[:10]}...")  # Fixed: show first 10 chars only for security
+print(f"Bot Token starts with: {TOKEN[:10]}...")  # Show only first 10 chars for security
 print(f"Admin IDs: {ADMIN_IDS}")
 
 DB_PATH = 'bot.db'
@@ -45,7 +49,6 @@ logging.basicConfig(
     level=logging.INFO
 )
 logger = logging.getLogger(__name__)
-
 # ========== DATABASE SETUP ==========
 def init_db():
     conn = sqlite3.connect(DB_PATH)
